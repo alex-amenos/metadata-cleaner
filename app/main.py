@@ -1,10 +1,12 @@
 """Local-only metadata cleaner. Binds to 127.0.0.1; files never leave the machine."""
+import atexit
 import io
 import json
 import os
 import shutil
 import subprocess
 import tempfile
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -82,7 +84,20 @@ def pick_cleaner(ext: str):
     return None
 
 
-def clean_one(name: str, data: bytes) -> tuple[str, bytes]:
+def read_tags(path: Path) -> dict:
+    if shutil.which("exiftool") is None:
+        raise RuntimeError("'exiftool' is not installed (brew install exiftool)")
+    r = subprocess.run(["exiftool", "-json", "-a", "-G1", str(path)],
+                       capture_output=True, text=True, timeout=120)
+    if r.returncode != 0:
+        raise RuntimeError((r.stderr or r.stdout).strip()[:500])
+    tags = json.loads(r.stdout)[0]
+    # Drop tags about the temp file itself, not the user's metadata.
+    return {k: v for k, v in tags.items()
+            if k != "SourceFile" and not k.startswith(("System:", "ExifTool:"))}
+
+
+def clean_one(name: str, data: bytes) -> tuple[str, bytes, dict, dict]:
     name = Path(name).name
     ext = Path(name).suffix.lower()
     cleaner = pick_cleaner(ext)
@@ -91,50 +106,73 @@ def clean_one(name: str, data: bytes) -> tuple[str, bytes]:
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp) / f"input{ext}"
         src.write_bytes(data)
+        before = read_tags(src)  # must run first: some cleaners edit src in place
         out = cleaner(src)
+        after = read_tags(out)
         out_name = f"{Path(name).stem}.docx" if ext == ".doc" else name
-        return out_name, out.read_bytes()
+        return out_name, out.read_bytes(), before, after
+
+
+# Cleaned files wait on disk until downloaded.
+RESULTS: dict[str, dict] = {}
+
+
+@atexit.register
+def _cleanup() -> None:
+    for r in RESULTS.values():
+        shutil.rmtree(r["dir"], ignore_errors=True)
 
 
 @app.post("/clean")
 async def clean(files: list[UploadFile] = File(...)):
-    results, errors = [], {}
+    token = uuid.uuid4().hex
+    outdir = Path(tempfile.mkdtemp(prefix="mdclean-"))
+    report, errors, saved = {}, {}, []
     for f in files:
+        name = f.filename or "file"
         try:
-            results.append(clean_one(f.filename or "file", await f.read()))
+            out_name, data, before, after = clean_one(name, await f.read())
+            (outdir / out_name).write_bytes(data)
+            saved.append(out_name)
+            report[name] = {"before": before, "after": after, "output": out_name}
         except Exception as e:  # report per-file failures
-            errors[f.filename] = str(e)
-    if not results:
-        return JSONResponse({"errors": errors}, status_code=422)
-    if len(results) == 1 and not errors:
-        name, data = results[0]
-        return Response(data, media_type="application/octet-stream",
-                        headers={"Content-Disposition": f'attachment; filename="{name}"'})
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for name, data in results:
-            z.writestr(name, data)
-        if errors:
-            z.writestr("ERRORS.txt", "\n".join(f"{k}: {v}" for k, v in errors.items()))
-    return Response(buf.getvalue(), media_type="application/zip",
-                    headers={"Content-Disposition": 'attachment; filename="cleaned.zip"'})
+            errors[name] = str(e)
+            report[name] = {"error": str(e)}
+    if not saved:
+        shutil.rmtree(outdir, ignore_errors=True)
+        return JSONResponse({"errors": errors, "files": report}, status_code=422)
+    RESULTS[token] = {"dir": outdir, "files": saved, "errors": errors}
+    return {"token": token, "files": report}
+
+
+@app.get("/download/{token}")
+def download(token: str):
+    res = RESULTS.pop(token, None)
+    if res is None:
+        return JSONResponse({"error": "unknown or already downloaded"}, status_code=404)
+    try:
+        if len(res["files"]) == 1 and not res["errors"]:
+            name = res["files"][0]
+            data, media, fname = (res["dir"] / name).read_bytes(), "application/octet-stream", name
+        else:
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+                for name in res["files"]:
+                    z.write(res["dir"] / name, name)
+                if res["errors"]:
+                    z.writestr("ERRORS.txt", "\n".join(f"{k}: {v}" for k, v in res["errors"].items()))
+            data, media, fname = buf.getvalue(), "application/zip", "cleaned.zip"
+    finally:
+        shutil.rmtree(res["dir"], ignore_errors=True)
+    return Response(data, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
 
 def inspect_one(name: str, data: bytes) -> dict:
-    ext = Path(name).suffix.lower()
     with tempfile.TemporaryDirectory() as tmp:
-        src = Path(tmp) / f"input{ext}"
+        src = Path(tmp) / f"input{Path(name).suffix.lower()}"
         src.write_bytes(data)
-        if shutil.which("exiftool") is None:
-            raise RuntimeError("'exiftool' is not installed (brew install exiftool)")
-        r = subprocess.run(["exiftool", "-json", "-a", "-G1", str(src)],
-                           capture_output=True, text=True, timeout=120)
-        if r.returncode != 0:
-            raise RuntimeError((r.stderr or r.stdout).strip()[:500])
-        tags = json.loads(r.stdout)[0]
-    # Drop tags about the temp file itself, not the user's metadata.
-    return {k: v for k, v in tags.items()
-            if k != "SourceFile" and not k.startswith(("System:", "ExifTool:"))}
+        return read_tags(src)
 
 
 @app.post("/inspect")

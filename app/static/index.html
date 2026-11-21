@@ -14,6 +14,12 @@
   .file table { font-size: .8rem; border-collapse: collapse; width: 100%; }
   .file td { border-top: 1px solid #eee; padding: 2px 4px; vertical-align: top; word-break: break-all; }
   .file td:first-child { color: #666; width: 40%; }
+  tr.removed td { background: #fde8ea; color: #b00020; }
+  tr.removed td:last-child { text-decoration: line-through; }
+  tr.changed td { background: #fff4d6; }
+  tr.kept td { color: #666; }
+  .sum { font-size: .85rem; margin: .3rem 0; }
+  #download { display: none; margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; border-radius: 8px; border: 0; background: #0a64d8; color: #fff; cursor: pointer; }
   .err { color: #b00020; font-size: .85rem; }
   #clean { display: none; margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; border-radius: 8px; border: 0; background: #1a8f3c; color: #fff; cursor: pointer; }
   #status, #tools { margin-top: 1rem; white-space: pre-wrap; }
@@ -30,7 +36,8 @@
 </div>
 <input id="file" type="file" multiple hidden>
 <div id="list"></div>
-<button id="clean" type="button">Limpiar metadatos / Clean metadata</button>
+<button id="clean" type="button">Borrar metadatos / Delete metadata</button>
+<button id="download" type="button">Descargar / Download</button>
 <div id="status"></div>
 <div id="tools"></div>
 <script>
@@ -48,7 +55,7 @@ cleanBtn.onclick = () => upload(selected);
 // Metadata is untrusted file content: render with textContent only.
 async function show(files) {
   selected = [...files];
-  list.replaceChildren(); cleanBtn.style.display = 'none'; status.textContent = '';
+  list.replaceChildren(); cleanBtn.style.display = 'none'; dlBtn.style.display = 'none'; status.textContent = '';
   if (!selected.length) return;
   status.textContent = 'Leyendo metadatos / Reading metadata...';
   const fd = new FormData();
@@ -80,23 +87,69 @@ async function show(files) {
   cleanBtn.style.display = 'inline-block';
 }
 
+const dlBtn = document.getElementById('download');
+const fmt = v => typeof v === 'object' ? JSON.stringify(v) : String(v);
+
+function diffTable(before, after) {
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+  const t = document.createElement('table');
+  let removed = 0, changed = 0, kept = 0;
+  for (const k of keys) {
+    const inB = k in before, inA = k in after;
+    let cls, val;
+    if (inB && !inA) { cls = 'removed'; val = fmt(before[k]); removed++; }
+    else if (inB && inA && fmt(before[k]) !== fmt(after[k])) { cls = 'changed'; val = fmt(before[k]) + ' → ' + fmt(after[k]); changed++; }
+    else if (inB) { cls = 'kept'; val = fmt(after[k]); kept++; }
+    else { cls = 'changed'; val = '(nuevo / new) ' + fmt(after[k]); changed++; }
+    const tr = t.insertRow(); tr.className = cls;
+    tr.insertCell().textContent = k;
+    tr.insertCell().textContent = val;
+  }
+  return { t, removed, changed, kept };
+}
+
+// Metadata is untrusted file content: render with textContent only.
+function showDiff(report) {
+  list.replaceChildren();
+  for (const [name, d] of Object.entries(report)) {
+    const box = document.createElement('div'); box.className = 'file';
+    const h = document.createElement('h3'); h.textContent = name; box.append(h);
+    if (d.error) {
+      const p = document.createElement('div'); p.className = 'err'; p.textContent = d.error; box.append(p);
+    } else {
+      const { t, removed, changed, kept } = diffTable(d.before, d.after);
+      const sum = document.createElement('div'); sum.className = 'sum';
+      sum.textContent = `Eliminados / Removed: ${removed} · Modificados / Changed: ${changed} · Restantes / Remaining: ${kept}`;
+      box.append(sum);
+      if (t.rows.length) box.append(t);
+    }
+    list.append(box);
+  }
+}
+
 async function upload(files) {
   if (!files.length) return;
   const fd = new FormData();
   for (const f of files) fd.append('files', f);
-  status.textContent = 'Limpiando / Cleaning...';
-  const r = await fetch('/clean', { method: 'POST', body: fd });
-  if (!r.ok) {
-    const j = await r.json().catch(() => ({}));
-    status.textContent = 'Failed:\n' + Object.entries(j.errors || {}).map(([k, v]) => `${k}: ${v}`).join('\n');
-    return;
-  }
-  const cd = r.headers.get('Content-Disposition') || '';
-  const name = (cd.match(/filename="(.+)"/) || [])[1] || 'cleaned';
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(await r.blob());
-  a.download = name; a.click();
-  status.textContent = 'Listo / Done: ' + name;
+  status.textContent = 'Borrando / Deleting...';
+  cleanBtn.style.display = 'none'; dlBtn.style.display = 'none';
+  let r, j;
+  try { r = await fetch('/clean', { method: 'POST', body: fd }); j = await r.json(); }
+  catch (e) { status.textContent = 'Error: ' + e; cleanBtn.style.display = 'inline-block'; return; }
+  showDiff(j.files || {});
+  if (!r.ok) { status.textContent = 'Failed'; cleanBtn.style.display = 'inline-block'; return; }
+  status.textContent = 'Listo / Done';
+  dlBtn.style.display = 'inline-block';
+  dlBtn.onclick = async () => {
+    const d = await fetch('/download/' + j.token);
+    if (!d.ok) { status.textContent = 'Descarga no disponible / Download unavailable'; return; }
+    const cd = d.headers.get('Content-Disposition') || '';
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await d.blob());
+    a.download = (cd.match(/filename="(.+)"/) || [])[1] || 'cleaned';
+    a.click();
+    dlBtn.style.display = 'none';
+  };
 }
 fetch('/tools').then(r => r.json()).then(t => {
   document.getElementById('tools').textContent = 'Tools: ' +

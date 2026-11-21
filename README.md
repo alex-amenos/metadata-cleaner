@@ -14,7 +14,7 @@ The launcher installs any missing tools (`exiftool ffmpeg qpdf mat2`), creates a
 
 For legacy `.doc` support: `brew install --cask libreoffice`.
 
-Multiple files (or any failures) return a zip, with `ERRORS.txt` listing failed files.
+Selecting or dropping files lists their current metadata. **Borrar metadatos** cleans them and shows a before/after diff (red = removed, yellow = changed, grey = remaining); then **Descargar** saves the result. Multiple files (or any failures) download as a zip, with `ERRORS.txt` listing failed files.
 
 ## Tools per type
 
