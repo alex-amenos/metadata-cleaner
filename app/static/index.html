@@ -2,13 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Metadata Cleaner</title>
 <style>
   body { font-family: system-ui; max-width: 640px; margin: 3rem auto; padding: 0 1rem; }
+  #lang { position: fixed; top: 1rem; right: 1rem; padding: .35rem .5rem; font-size: .9rem; border-radius: 8px; border: 1px solid #aaa; background: #fff; }
   #drop { border: 2px dashed #888; border-radius: 12px; padding: 3rem; text-align: center; }
   #drop.over { background: #eef; }
-  #pick { margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; border-radius: 8px; border: 0; background: #0a64d8; color: #fff; cursor: pointer; }
+  button { margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; border-radius: 8px; border: 0; color: #fff; cursor: pointer; }
+  #pick, #download { background: #0a64d8; }
   #pick:hover { background: #0852b3; }
+  #clean { display: none; background: #1a8f3c; }
+  #download { display: none; }
   .file { margin-top: 1rem; border: 1px solid #ccc; border-radius: 8px; padding: .5rem .8rem; }
   .file h3 { margin: .2rem 0; word-break: break-all; font-size: 1rem; }
   .file table { font-size: .8rem; border-collapse: collapse; width: 100%; }
@@ -19,76 +24,110 @@
   tr.changed td { background: #fff4d6; }
   tr.kept td { color: #666; }
   .sum { font-size: .85rem; margin: .3rem 0; }
-  #download { display: none; margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; border-radius: 8px; border: 0; background: #0a64d8; color: #fff; cursor: pointer; }
   .err { color: #b00020; font-size: .85rem; }
-  #clean { display: none; margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; border-radius: 8px; border: 0; background: #1a8f3c; color: #fff; cursor: pointer; }
   #status, #tools { margin-top: 1rem; white-space: pre-wrap; }
   #tools { color: #666; font-size: .85rem; }
 </style>
 </head>
 <body>
-<h1>Metadata Cleaner</h1>
-<p>Runs locally. Drop documents, PDFs, images, video or audio to strip metadata.</p>
+<select id="lang" aria-label="Language">
+  <option value="en">English</option>
+  <option value="es">Castellano</option>
+  <option value="ca">Català</option>
+</select>
+<h1 data-i18n="title"></h1>
+<p data-i18n="intro"></p>
 <div id="drop">
-  <div>Arrastra archivos aquí / Drag files here</div>
-  <div>o / or</div>
-  <button id="pick" type="button">Seleccionar archivos / Choose files</button>
+  <div data-i18n="dragHere"></div>
+  <div data-i18n="or"></div>
+  <button id="pick" type="button" data-i18n="choose"></button>
 </div>
 <input id="file" type="file" multiple hidden>
 <div id="list"></div>
-<button id="clean" type="button">Borrar metadatos / Delete metadata</button>
-<button id="download" type="button">Descargar / Download</button>
+<button id="clean" type="button" data-i18n="del"></button>
+<button id="download" type="button" data-i18n="download"></button>
 <div id="status"></div>
 <div id="tools"></div>
 <script>
-const drop = document.getElementById('drop'), input = document.getElementById('file'),
-      status = document.getElementById('status');
-const list = document.getElementById('list'), cleanBtn = document.getElementById('clean');
-let selected = [];
-document.getElementById('pick').onclick = () => input.click();
-input.onchange = () => { show(input.files); input.value = ''; };
-drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
-drop.ondragleave = () => drop.classList.remove('over');
-drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); show(e.dataTransfer.files); };
-cleanBtn.onclick = () => upload(selected);
+const I18N = {
+  en: {
+    title: 'Metadata Cleaner',
+    intro: 'Runs locally. Drop documents, PDFs, images, video or audio to strip metadata.',
+    dragHere: 'Drag files here', or: 'or', choose: 'Choose files',
+    del: 'Delete metadata', download: 'Download',
+    reading: 'Reading metadata...', deleting: 'Deleting metadata...', done: 'Done',
+    failed: 'Failed', noMeta: 'No metadata found', newTag: '(new)',
+    dlUnavailable: 'Download unavailable', error: 'Error',
+    summary: (r, c, k) => `Removed: ${r} · Changed: ${c} · Remaining: ${k}`,
+    tools: 'Tools', missing: 'missing',
+  },
+  es: {
+    title: 'Limpiador de metadatos',
+    intro: 'Funciona en local. Arrastra documentos, PDF, imágenes, vídeo o audio para eliminar sus metadatos.',
+    dragHere: 'Arrastra archivos aquí', or: 'o', choose: 'Seleccionar archivos',
+    del: 'Borrar metadatos', download: 'Descargar',
+    reading: 'Leyendo metadatos...', deleting: 'Borrando metadatos...', done: 'Listo',
+    failed: 'Error', noMeta: 'Sin metadatos', newTag: '(nuevo)',
+    dlUnavailable: 'Descarga no disponible', error: 'Error',
+    summary: (r, c, k) => `Eliminados: ${r} · Modificados: ${c} · Restantes: ${k}`,
+    tools: 'Herramientas', missing: 'falta',
+  },
+  ca: {
+    title: 'Netejador de metadades',
+    intro: 'Funciona en local. Arrossega documents, PDF, imatges, vídeo o àudio per eliminar-ne les metadades.',
+    dragHere: 'Arrossega els fitxers aquí', or: 'o', choose: 'Selecciona fitxers',
+    del: 'Esborra les metadades', download: 'Descarrega',
+    reading: 'Llegint metadades...', deleting: 'Esborrant metadades...', done: 'Fet',
+    failed: 'Error', noMeta: 'Sense metadades', newTag: '(nou)',
+    dlUnavailable: 'Descàrrega no disponible', error: 'Error',
+    summary: (r, c, k) => `Eliminades: ${r} · Modificades: ${c} · Restants: ${k}`,
+    tools: 'Eines', missing: 'falta',
+  },
+};
+
+const $ = id => document.getElementById(id);
+const drop = $('drop'), input = $('file'), list = $('list'), statusEl = $('status'),
+      cleanBtn = $('clean'), dlBtn = $('download'), langSel = $('lang');
+
+const saved = localStorage.getItem('lang');
+const guess = (navigator.language || 'en').slice(0, 2);
+let lang = I18N[saved] ? saved : (I18N[guess] ? guess : 'en');
+
+// phase: idle | inspected | cleaned. status is [key, extra] so it can be re-translated.
+const state = { selected: [], info: null, report: null, token: null, phase: 'idle', status: null, tools: null };
+const tr = (k, ...a) => { const v = I18N[lang][k]; return typeof v === 'function' ? v(...a) : v; };
+const fmt = v => typeof v === 'object' ? JSON.stringify(v) : String(v);
+const setStatus = (key, extra = '') => { state.status = key ? [key, extra] : null; };
 
 // Metadata is untrusted file content: render with textContent only.
-async function show(files) {
-  selected = [...files];
-  list.replaceChildren(); cleanBtn.style.display = 'none'; dlBtn.style.display = 'none'; status.textContent = '';
-  if (!selected.length) return;
-  status.textContent = 'Leyendo metadatos / Reading metadata...';
-  const fd = new FormData();
-  for (const f of selected) fd.append('files', f);
-  let info = {};
-  try { info = await (await fetch('/inspect', { method: 'POST', body: fd })).json(); }
-  catch (e) { status.textContent = 'Error: ' + e; return; }
-  status.textContent = '';
-  for (const f of selected) {
-    const box = document.createElement('div'); box.className = 'file';
-    const h = document.createElement('h3'); h.textContent = f.name; box.append(h);
-    const d = info[f.name] || {};
+function card(name) {
+  const box = document.createElement('div'); box.className = 'file';
+  const h = document.createElement('h3'); h.textContent = name; box.append(h);
+  return box;
+}
+function errLine(msg) {
+  const p = document.createElement('div'); p.className = 'err'; p.textContent = msg; return p;
+}
+
+function renderInfo() {
+  for (const f of state.selected) {
+    const box = card(f.name);
+    const d = state.info[f.name] || {};
     const entries = Object.entries(d.tags || {});
-    if (d.error) {
-      const p = document.createElement('div'); p.className = 'err'; p.textContent = d.error; box.append(p);
-    } else if (!entries.length) {
-      box.append('Sin metadatos / No metadata found');
-    } else {
+    if (d.error) box.append(errLine(d.error));
+    else if (!entries.length) box.append(tr('noMeta'));
+    else {
       const t = document.createElement('table');
       for (const [k, v] of entries) {
-        const tr = t.insertRow();
-        tr.insertCell().textContent = k;
-        tr.insertCell().textContent = typeof v === 'object' ? JSON.stringify(v) : String(v);
+        const row = t.insertRow();
+        row.insertCell().textContent = k;
+        row.insertCell().textContent = fmt(v);
       }
       box.append(t);
     }
     list.append(box);
   }
-  cleanBtn.style.display = 'inline-block';
 }
-
-const dlBtn = document.getElementById('download');
-const fmt = v => typeof v === 'object' ? JSON.stringify(v) : String(v);
 
 function diffTable(before, after) {
   const keys = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
@@ -98,28 +137,24 @@ function diffTable(before, after) {
     const inB = k in before, inA = k in after;
     let cls, val;
     if (inB && !inA) { cls = 'removed'; val = fmt(before[k]); removed++; }
-    else if (inB && inA && fmt(before[k]) !== fmt(after[k])) { cls = 'changed'; val = fmt(before[k]) + ' → ' + fmt(after[k]); changed++; }
+    else if (inB && fmt(before[k]) !== fmt(after[k])) { cls = 'changed'; val = fmt(before[k]) + ' → ' + fmt(after[k]); changed++; }
     else if (inB) { cls = 'kept'; val = fmt(after[k]); kept++; }
-    else { cls = 'changed'; val = '(nuevo / new) ' + fmt(after[k]); changed++; }
-    const tr = t.insertRow(); tr.className = cls;
-    tr.insertCell().textContent = k;
-    tr.insertCell().textContent = val;
+    else { cls = 'changed'; val = tr('newTag') + ' ' + fmt(after[k]); changed++; }
+    const row = t.insertRow(); row.className = cls;
+    row.insertCell().textContent = k;
+    row.insertCell().textContent = val;
   }
   return { t, removed, changed, kept };
 }
 
-// Metadata is untrusted file content: render with textContent only.
-function showDiff(report) {
-  list.replaceChildren();
-  for (const [name, d] of Object.entries(report)) {
-    const box = document.createElement('div'); box.className = 'file';
-    const h = document.createElement('h3'); h.textContent = name; box.append(h);
-    if (d.error) {
-      const p = document.createElement('div'); p.className = 'err'; p.textContent = d.error; box.append(p);
-    } else {
+function renderDiff() {
+  for (const [name, d] of Object.entries(state.report)) {
+    const box = card(name);
+    if (d.error) box.append(errLine(d.error));
+    else {
       const { t, removed, changed, kept } = diffTable(d.before, d.after);
       const sum = document.createElement('div'); sum.className = 'sum';
-      sum.textContent = `Eliminados / Removed: ${removed} · Modificados / Changed: ${changed} · Restantes / Remaining: ${kept}`;
+      sum.textContent = tr('summary', removed, changed, kept);
       box.append(sum);
       if (t.rows.length) box.append(t);
     }
@@ -127,34 +162,74 @@ function showDiff(report) {
   }
 }
 
-async function upload(files) {
-  if (!files.length) return;
+function render() {
+  document.documentElement.lang = lang;
+  document.title = tr('title');
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = tr(el.dataset.i18n); });
+  langSel.value = lang;
+
+  list.replaceChildren();
+  if (state.report) renderDiff(); else if (state.info) renderInfo();
+
+  cleanBtn.style.display = state.phase === 'inspected' ? 'inline-block' : 'none';
+  dlBtn.style.display = state.phase === 'cleaned' && state.token ? 'inline-block' : 'none';
+
+  statusEl.textContent = state.status
+    ? tr(state.status[0]) + (state.status[1] ? ': ' + state.status[1] : '') : '';
+
+  $('tools').textContent = state.tools
+    ? tr('tools') + ': ' + Object.entries(state.tools)
+        .map(([k, v]) => `${k} ${v ? '✓' : '✗ ' + tr('missing')}`).join('  ')
+    : '';
+}
+
+async function show(files) {
+  Object.assign(state, { selected: [...files], info: null, report: null, token: null, phase: 'idle' });
+  setStatus(null);
+  if (!state.selected.length) return render();
+  setStatus('reading'); render();
   const fd = new FormData();
-  for (const f of files) fd.append('files', f);
-  status.textContent = 'Borrando / Deleting...';
-  cleanBtn.style.display = 'none'; dlBtn.style.display = 'none';
+  for (const f of state.selected) fd.append('files', f);
+  try {
+    state.info = await (await fetch('/inspect', { method: 'POST', body: fd })).json();
+  } catch (e) { setStatus('error', String(e)); return render(); }
+  state.phase = 'inspected'; setStatus(null); render();
+}
+
+async function upload() {
+  const fd = new FormData();
+  for (const f of state.selected) fd.append('files', f);
+  state.phase = 'idle'; setStatus('deleting'); render();
   let r, j;
   try { r = await fetch('/clean', { method: 'POST', body: fd }); j = await r.json(); }
-  catch (e) { status.textContent = 'Error: ' + e; cleanBtn.style.display = 'inline-block'; return; }
-  showDiff(j.files || {});
-  if (!r.ok) { status.textContent = 'Failed'; cleanBtn.style.display = 'inline-block'; return; }
-  status.textContent = 'Listo / Done';
-  dlBtn.style.display = 'inline-block';
-  dlBtn.onclick = async () => {
-    const d = await fetch('/download/' + j.token);
-    if (!d.ok) { status.textContent = 'Descarga no disponible / Download unavailable'; return; }
-    const cd = d.headers.get('Content-Disposition') || '';
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(await d.blob());
-    a.download = (cd.match(/filename="(.+)"/) || [])[1] || 'cleaned';
-    a.click();
-    dlBtn.style.display = 'none';
-  };
+  catch (e) { state.phase = 'inspected'; setStatus('error', String(e)); return render(); }
+  state.report = j.files || null;
+  if (!r.ok) { state.phase = 'inspected'; setStatus('failed'); return render(); }
+  Object.assign(state, { token: j.token, phase: 'cleaned' }); setStatus('done'); render();
 }
-fetch('/tools').then(r => r.json()).then(t => {
-  document.getElementById('tools').textContent = 'Tools: ' +
-    Object.entries(t).map(([k, v]) => `${k} ${v ? '✓' : '✗ missing'}`).join('  ');
-});
+
+async function download() {
+  const d = await fetch('/download/' + state.token);
+  if (!d.ok) { setStatus('dlUnavailable'); return render(); }
+  const cd = d.headers.get('Content-Disposition') || '';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(await d.blob());
+  a.download = (cd.match(/filename="(.+)"/) || [])[1] || 'cleaned';
+  a.click();
+  state.token = null; render();
+}
+
+$('pick').onclick = () => input.click();
+input.onchange = () => { show(input.files); input.value = ''; };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); show(e.dataTransfer.files); };
+cleanBtn.onclick = upload;
+dlBtn.onclick = download;
+langSel.onchange = () => { lang = langSel.value; localStorage.setItem('lang', lang); render(); };
+
+render();
+fetch('/tools').then(r => r.json()).then(t => { state.tools = t; render(); });
 </script>
 </body>
 </html>

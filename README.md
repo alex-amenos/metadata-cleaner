@@ -16,6 +16,8 @@ For legacy `.doc` support: `brew install --cask libreoffice`.
 
 Selecting or dropping files lists their current metadata. **Borrar metadatos** cleans them and shows a before/after diff (red = removed, yellow = changed, grey = remaining); then **Descargar** saves the result. Multiple files (or any failures) download as a zip, with `ERRORS.txt` listing failed files.
 
+The UI language (English, Castellano, Català) can be switched from the selector at the top right; it defaults to the browser language and is remembered.
+
 ## Tools per type
 
 | Type | Tool |
