@@ -5,37 +5,59 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Metadata Cleaner</title>
 <style>
-  body { font-family: system-ui; max-width: 640px; margin: 3rem auto; padding: 0 1rem; }
-  #lang { position: fixed; top: 1rem; right: 1rem; padding: .35rem .5rem; font-size: .9rem; border-radius: 8px; border: 1px solid #aaa; background: #fff; }
-  #drop { border: 2px dashed #888; border-radius: 12px; padding: 3rem; text-align: center; }
+  :root { --pad: clamp(1rem, 4vw, 2rem); }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui; line-height: 1.5; margin: 0; color: #1c1c1e;
+    padding: max(var(--pad), env(safe-area-inset-top)) max(var(--pad), env(safe-area-inset-right))
+             max(var(--pad), env(safe-area-inset-bottom)) max(var(--pad), env(safe-area-inset-left));
+  }
+  main { max-width: 720px; margin: 0 auto; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+  h1 { margin: 0; font-size: clamp(1.4rem, 5vw, 2rem); line-height: 1.2; min-width: 0; overflow-wrap: anywhere; }
+  #lang { flex: none; padding: .45rem .75rem; font-size: .9rem; border-radius: 8px; border: 1px solid #aaa; background: #fff; }
+  p { margin: 0 0 1.25rem; }
+  #drop { border: 2px dashed #888; border-radius: 12px; padding: clamp(1.25rem, 6vw, 3rem); text-align: center; }
   #drop.over { background: #eef; }
-  button { margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; border-radius: 8px; border: 0; color: #fff; cursor: pointer; }
+  button { margin-top: 1rem; padding: .7rem 1.2rem; font-size: 1rem; border-radius: 8px; border: 0; color: #fff; cursor: pointer; }
+  #drop button { margin-top: .75rem; }
   #pick, #download { background: #0a64d8; }
   #pick:hover { background: #0852b3; }
   #clean { display: none; background: #1a8f3c; }
   #download { display: none; }
-  .file { margin-top: 1rem; border: 1px solid #ccc; border-radius: 8px; padding: .5rem .8rem; }
-  .file h3 { margin: .2rem 0; word-break: break-all; font-size: 1rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+  .actions button { margin-top: 1rem; }
+  .file { margin-top: 1rem; border: 1px solid #ccc; border-radius: 8px; padding: .75rem 1rem; }
+  .file h3 { margin: 0 0 .5rem; word-break: break-all; font-size: 1rem; }
+  .tablewrap { overflow-x: auto; }
   .file table { font-size: .8rem; border-collapse: collapse; width: 100%; }
-  .file td { border-top: 1px solid #eee; padding: 2px 4px; vertical-align: top; word-break: break-all; }
+  .file td { border-top: 1px solid #eee; padding: 4px 6px; vertical-align: top; word-break: break-word; }
   .file td:first-child { color: #666; width: 40%; }
   tr.removed td { background: #fde8ea; color: #b00020; }
   tr.removed td:last-child { text-decoration: line-through; }
   tr.changed td { background: #fff4d6; }
   tr.kept td { color: #666; }
-  .sum { font-size: .85rem; margin: .3rem 0; }
+  .sum { font-size: .85rem; margin: 0 0 .5rem; }
   .err { color: #b00020; font-size: .85rem; }
-  #status, #tools { margin-top: 1rem; white-space: pre-wrap; }
+  #status, #tools { margin-top: 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
   #tools { color: #666; font-size: .85rem; }
+  @media (max-width: 480px) {
+    .actions button { flex: 1 1 100%; }
+    .file { padding: .6rem .75rem; }
+    .file td:first-child { width: 45%; }
+  }
 </style>
 </head>
 <body>
-<select id="lang" aria-label="Language">
-  <option value="en">English</option>
-  <option value="es">Castellano</option>
-  <option value="ca">Català</option>
-</select>
-<h1 data-i18n="title"></h1>
+<main>
+<header>
+  <h1 data-i18n="title"></h1>
+  <select id="lang" aria-label="Language">
+    <option value="en">English</option>
+    <option value="es">Castellano</option>
+    <option value="ca">Català</option>
+  </select>
+</header>
 <p data-i18n="intro"></p>
 <div id="drop">
   <div data-i18n="dragHere"></div>
@@ -44,10 +66,13 @@
 </div>
 <input id="file" type="file" multiple hidden>
 <div id="list"></div>
-<button id="clean" type="button" data-i18n="del"></button>
-<button id="download" type="button" data-i18n="download"></button>
+<div class="actions">
+  <button id="clean" type="button" data-i18n="del"></button>
+  <button id="download" type="button" data-i18n="download"></button>
+</div>
 <div id="status"></div>
 <div id="tools"></div>
+</main>
 <script>
 const I18N = {
   en: {
@@ -105,6 +130,9 @@ function card(name) {
   const h = document.createElement('h3'); h.textContent = name; box.append(h);
   return box;
 }
+function wrap(t) {
+  const w = document.createElement('div'); w.className = 'tablewrap'; w.append(t); return w;
+}
 function errLine(msg) {
   const p = document.createElement('div'); p.className = 'err'; p.textContent = msg; return p;
 }
@@ -123,7 +151,7 @@ function renderInfo() {
         row.insertCell().textContent = k;
         row.insertCell().textContent = fmt(v);
       }
-      box.append(t);
+      box.append(wrap(t));
     }
     list.append(box);
   }
@@ -156,7 +184,7 @@ function renderDiff() {
       const sum = document.createElement('div'); sum.className = 'sum';
       sum.textContent = tr('summary', removed, changed, kept);
       box.append(sum);
-      if (t.rows.length) box.append(t);
+      if (t.rows.length) box.append(wrap(t));
     }
     list.append(box);
   }
