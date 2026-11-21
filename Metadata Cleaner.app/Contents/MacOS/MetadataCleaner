@@ -8,7 +8,12 @@ PORT="${PORT:-8000}"
 URL="http://127.0.0.1:$PORT"
 STATE="$HOME/Library/Application Support/MetadataCleaner"
 LOG="$HOME/Library/Logs/MetadataCleaner.log"
-mkdir -p "$STATE" "$(dirname "$LOG")"
+# Fall back to temp dirs if the Library folders are not writable.
+if ! { mkdir -p "$STATE" "$(dirname "$LOG")" && touch "$LOG"; } 2>/dev/null; then
+  STATE="${TMPDIR:-/tmp}/MetadataCleaner"
+  LOG="$STATE/MetadataCleaner.log"
+  mkdir -p "$STATE" && touch "$LOG"
+fi
 
 alert() { osascript -e "display alert \"Metadata Cleaner\" message \"$1\"" >/dev/null 2>&1; }
 running() { curl -fs --max-time 2 "$URL/tools" 2>/dev/null | grep -q exiftool; }
@@ -36,7 +41,9 @@ fi
 osascript -e 'display notification "Starting… the first run installs tools and can take a few minutes." with title "Metadata Cleaner"' >/dev/null 2>&1
 
 cd "$ROOT"
-NO_OPEN=1 nohup ./run.sh >>"$LOG" 2>&1 </dev/null &
+echo "$(date) starting from $ROOT" >>"$LOG"
+# "bash run.sh" works even if the executable bit was lost (e.g. after unzipping).
+NO_OPEN=1 nohup bash ./run.sh >>"$LOG" 2>&1 </dev/null &
 echo $! > "$STATE/pid"
 
 # First run may install tools, so wait up to 10 minutes.
@@ -45,5 +52,6 @@ for _ in $(seq 1 600); do
   kill -0 "$(cat "$STATE/pid")" 2>/dev/null || break
   sleep 1
 done
-alert "Could not start Metadata Cleaner. See the log: $LOG"
+detail=$(tail -n 6 "$LOG" 2>/dev/null | tr -d '"\\' | tr '\n' ' ')
+alert "Could not start Metadata Cleaner. Last log lines: $detail  (full log: $LOG)"
 exit 1
