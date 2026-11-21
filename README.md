@@ -105,8 +105,9 @@ Tests that need `exiftool` or `ffmpeg` are skipped when those tools are not inst
 
 ## Limitations
 
-- Embedded content (hidden text, tracked changes, watermarks, the image pixels themselves) is not metadata and is not removed.
+- Embedded content (hidden text, watermarks, the image pixels themselves) is not metadata and is not removed.
+- **Documents may lose content.** mat2 removes comments, tracked changes and author info from Office files, so those are lost in the clean copy. `.doc` is converted to `.docx` through LibreOffice first, which can shift complex formatting. PDF annotations/comments may remain and can still contain author names. This is not yet verified with real documents: check the result before discarding the original (it is never modified, the copy is `<name>_clean.<ext>`).
 - Cleaning needs the matching tool installed; otherwise that file reports an error naming the missing tool.
 - Error messages from the server and metadata tag names are not translated.
 - Verify any result yourself with `exiftool -a -G1 file`.
-- Automated tests cover the security protections and basic JPEG/MP4 cleaning, not every file type.
+- Automated tests cover the security protections and basic JPEG/MP4 cleaning, not documents (docx, doc, PDF).
