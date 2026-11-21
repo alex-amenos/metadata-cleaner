@@ -1,57 +1,14 @@
 #!/usr/bin/env bash
-# Double-click launcher: no Terminal window. Starts the local server in the background,
-# opens the browser, and offers to stop the server if it is already running.
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-
+# Opens "Metadata Cleaner.command" in Terminal, which runs the server and opens the browser.
+# Running in Terminal gives run.sh your normal shell environment (PATH, brew, python).
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-PORT="${PORT:-8000}"
-URL="http://127.0.0.1:$PORT"
-STATE="$HOME/Library/Application Support/MetadataCleaner"
-LOG="$HOME/Library/Logs/MetadataCleaner.log"
-# Fall back to temp dirs if the Library folders are not writable.
-if ! { mkdir -p "$STATE" "$(dirname "$LOG")" && touch "$LOG"; } 2>/dev/null; then
-  STATE="${TMPDIR:-/tmp}/MetadataCleaner"
-  LOG="$STATE/MetadataCleaner.log"
-  mkdir -p "$STATE" && touch "$LOG"
-fi
+CMD="$ROOT/Metadata Cleaner.command"
 
-alert() { osascript -e "display alert \"Metadata Cleaner\" message \"$1\"" >/dev/null 2>&1; }
-running() { curl -fs --max-time 2 "$URL/tools" 2>/dev/null | grep -q exiftool; }
-
-if running; then
-  choice=$(osascript -e 'button returned of (display dialog "Metadata Cleaner is running." buttons {"Stop server", "Open"} default button "Open")' 2>/dev/null) || exit 0
-  if [ "$choice" = "Stop server" ]; then
-    [ -f "$STATE/pid" ] && kill "$(cat "$STATE/pid")" 2>/dev/null
-    rm -f "$STATE/pid"
-  else
-    open "$URL"
-  fi
-  exit 0
-fi
-
-if [ ! -f "$ROOT/run.sh" ]; then
-  alert "Keep Metadata Cleaner.app inside the metadata-cleaner folder (run.sh was not found next to it)."
-  exit 1
-fi
-if ! command -v brew >/dev/null; then
-  alert "Homebrew is required. Install it from https://brew.sh and open this app again."
+if [ ! -f "$CMD" ]; then
+  osascript -e 'display alert "Metadata Cleaner" message "Keep Metadata Cleaner.app inside the metadata-cleaner folder (Metadata Cleaner.command was not found next to it)."' >/dev/null 2>&1
   exit 1
 fi
 
-osascript -e 'display notification "Starting… the first run installs tools and can take a few minutes." with title "Metadata Cleaner"' >/dev/null 2>&1
-
-cd "$ROOT"
-echo "$(date) starting from $ROOT" >>"$LOG"
-# "bash run.sh" works even if the executable bit was lost (e.g. after unzipping).
-NO_OPEN=1 nohup bash ./run.sh >>"$LOG" 2>&1 </dev/null &
-echo $! > "$STATE/pid"
-
-# First run may install tools, so wait up to 10 minutes.
-for _ in $(seq 1 600); do
-  running && { open "$URL"; exit 0; }
-  kill -0 "$(cat "$STATE/pid")" 2>/dev/null || break
-  sleep 1
-done
-detail=$(tail -n 6 "$LOG" 2>/dev/null | tr -d '"\\' | tr '\n' ' ')
-alert "Could not start Metadata Cleaner. Last log lines: $detail  (full log: $LOG)"
-exit 1
+# Executable bits are lost when unzipping; Terminal needs them to run a .command.
+chmod +x "$CMD" "$ROOT/run.sh" 2>/dev/null
+open -a Terminal "$CMD"

@@ -16,21 +16,22 @@ The interface is available in English, Castellano and Català (selector at the t
 
 Requires [Homebrew](https://brew.sh) and Python 3 (`xcode-select --install` provides one).
 
-**Without Terminal:** double-click `Metadata Cleaner.app`.
+**Double-click** `Metadata Cleaner.app` (or `Metadata Cleaner.command`).
 
-- It installs any missing tools on first run (this can take a few minutes), starts the server in the background and opens your browser.
-- Open it again while it is running to choose **Open** or **Stop server**.
-- Logs: `~/Library/Logs/MetadataCleaner.log`.
-- Keep the app inside this folder; it uses `run.sh` next to it.
+- The app opens Terminal and runs `Metadata Cleaner.command`, so it behaves exactly like running `./run.sh` yourself.
+- On first run it installs any missing tools (this can take a few minutes), starts the server and opens your browser.
+- Opening it again while the server runs just opens the browser.
+- To stop the server, press Ctrl+C or close the Terminal window.
+- Keep the app inside this folder; it uses the files next to it.
 - If macOS blocks it (Gatekeeper, for example after downloading a zip), right-click → Open once, or run `xattr -dr com.apple.quarantine .` in this folder.
 
-**With Terminal:**
+**From Terminal:**
 
 ```sh
-./run.sh        # or double-click "Metadata Cleaner.command"
+./run.sh
 ```
 
-`run.sh` installs missing tools, creates `.venv`, starts the server and opens the browser. Use `PORT=9000 ./run.sh` for another port (the `.app` honours `PORT` too).
+`run.sh` installs missing tools, creates `.venv`, starts the server and opens the browser. Use `PORT=9000 ./run.sh` for another port.
 
 ### Install the tools manually
 
@@ -62,8 +63,8 @@ Metadata is read and compared with `exiftool -json -a -G1`.
 app/main.py            FastAPI app: file-type routing, cleaners, endpoints
 app/static/index.html  Single-page UI (vanilla JS, i18n, diff view)
 run.sh                 Launcher: installs tools, venv, server, opens browser
-Metadata Cleaner.app   Double-click launcher (no Terminal)
-Metadata Cleaner.command  Double-click launcher (opens Terminal)
+Metadata Cleaner.app   Double-click launcher (opens the .command in Terminal)
+Metadata Cleaner.command  Runs run.sh in Terminal
 requirements.txt       fastapi, uvicorn, python-multipart
 ```
 
