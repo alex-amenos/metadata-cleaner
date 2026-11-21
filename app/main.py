@@ -109,7 +109,8 @@ def clean_one(name: str, data: bytes) -> tuple[str, bytes, dict, dict]:
         before = read_tags(src)  # must run first: some cleaners edit src in place
         out = cleaner(src)
         after = read_tags(out)
-        out_name = f"{Path(name).stem}.docx" if ext == ".doc" else name
+        # The original is never touched; the result is a copy with a "_clean" suffix.
+        out_name = f"{Path(name).stem}_clean{'.docx' if ext == '.doc' else Path(name).suffix}"
         return out_name, out.read_bytes(), before, after
 
 
@@ -132,6 +133,11 @@ async def clean(files: list[UploadFile] = File(...)):
         name = f.filename or "file"
         try:
             out_name, data, before, after = clean_one(name, await f.read())
+            n = 2
+            base = Path(out_name)
+            while (outdir / out_name).exists():  # same filename uploaded twice
+                out_name = f"{base.stem}_{n}{base.suffix}"
+                n += 1
             (outdir / out_name).write_bytes(data)
             saved.append(out_name)
             report[name] = {"before": before, "after": after, "output": out_name}

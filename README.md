@@ -14,7 +14,7 @@ The launcher installs any missing tools (`exiftool ffmpeg qpdf mat2`), creates a
 
 For legacy `.doc` support: `brew install --cask libreoffice`.
 
-Selecting or dropping files lists their current metadata. **Borrar metadatos** cleans them and shows a before/after diff (red = removed, yellow = changed, grey = remaining); then **Descargar** saves the result. Multiple files (or any failures) download as a zip, with `ERRORS.txt` listing failed files.
+Selecting or dropping files lists their current metadata. **Borrar metadatos** cleans them and shows a before/after diff (red = removed, yellow = changed, grey = remaining); then **Descargar** saves a copy named `<name>_clean.<ext>` (legacy `.doc` becomes `<name>_clean.docx`). The original is never modified, and the UI labels which file is the original and which is the new metadata-free copy. Multiple files (or any failures) download as a zip, with `ERRORS.txt` listing failed files.
 
 The UI language (English, Castellano, Català) can be switched from the selector at the top right; it defaults to the browser language and is remembered.
 

@@ -37,6 +37,10 @@
   tr.removed td:last-child { text-decoration: line-through; }
   tr.changed td { background: #fff4d6; }
   tr.kept td { color: #666; }
+  .names { font-size: .85rem; margin: 0 0 .5rem; display: grid; gap: .25rem; }
+  .names span { overflow-wrap: anywhere; }
+  .badge { display: inline-block; font-size: .7rem; font-weight: 600; padding: .1rem .5rem; border-radius: 999px; margin-right: .4rem; background: #e5e5ea; color: #333; }
+  .badge.new { background: #1a8f3c; color: #fff; }
   .sum { font-size: .85rem; margin: 0 0 .5rem; }
   .err { color: #b00020; font-size: .85rem; }
   #status, #tools { margin-top: 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -79,8 +83,9 @@ const I18N = {
     title: 'Metadata Cleaner',
     intro: 'Runs locally. Drop documents, PDFs, images, video or audio to strip metadata.',
     dragHere: 'Drag files here', or: 'or', choose: 'Choose files',
-    del: 'Delete metadata', download: 'Download',
+    del: 'Delete metadata', download: 'Download clean copy',
     reading: 'Reading metadata...', deleting: 'Deleting metadata...', done: 'Done',
+    original: 'Original (unchanged)', cleanCopy: 'New file without metadata',
     failed: 'Failed', noMeta: 'No metadata found', newTag: '(new)',
     dlUnavailable: 'Download unavailable', error: 'Error',
     summary: (r, c, k) => `Removed: ${r} · Changed: ${c} · Remaining: ${k}`,
@@ -90,8 +95,9 @@ const I18N = {
     title: 'Limpiador de metadatos',
     intro: 'Funciona en local. Arrastra documentos, PDF, imágenes, vídeo o audio para eliminar sus metadatos.',
     dragHere: 'Arrastra archivos aquí', or: 'o', choose: 'Seleccionar archivos',
-    del: 'Borrar metadatos', download: 'Descargar',
+    del: 'Borrar metadatos', download: 'Descargar copia limpia',
     reading: 'Leyendo metadatos...', deleting: 'Borrando metadatos...', done: 'Listo',
+    original: 'Original (sin cambios)', cleanCopy: 'Nuevo archivo sin metadatos',
     failed: 'Error', noMeta: 'Sin metadatos', newTag: '(nuevo)',
     dlUnavailable: 'Descarga no disponible', error: 'Error',
     summary: (r, c, k) => `Eliminados: ${r} · Modificados: ${c} · Restantes: ${k}`,
@@ -101,8 +107,9 @@ const I18N = {
     title: 'Netejador de metadades',
     intro: 'Funciona en local. Arrossega documents, PDF, imatges, vídeo o àudio per eliminar-ne les metadades.',
     dragHere: 'Arrossega els fitxers aquí', or: 'o', choose: 'Selecciona fitxers',
-    del: 'Esborra les metadades', download: 'Descarrega',
+    del: 'Esborra les metadades', download: 'Descarrega la còpia neta',
     reading: 'Llegint metadades...', deleting: 'Esborrant metadades...', done: 'Fet',
+    original: 'Original (sense canvis)', cleanCopy: 'Nou fitxer sense metadades',
     failed: 'Error', noMeta: 'Sense metadades', newTag: '(nou)',
     dlUnavailable: 'Descàrrega no disponible', error: 'Error',
     summary: (r, c, k) => `Eliminades: ${r} · Modificades: ${c} · Restants: ${k}`,
@@ -181,6 +188,12 @@ function renderDiff() {
     if (d.error) box.append(errLine(d.error));
     else {
       const { t, removed, changed, kept } = diffTable(d.before, d.after);
+      const names = document.createElement('div'); names.className = 'names';
+      const o = document.createElement('span'), n = document.createElement('span');
+      const ob = document.createElement('span'); ob.className = 'badge'; ob.textContent = tr('original');
+      const nb = document.createElement('span'); nb.className = 'badge new'; nb.textContent = tr('cleanCopy');
+      o.append(ob, name); n.append(nb, d.output);
+      names.append(o, n); box.append(names);
       const sum = document.createElement('div'); sum.className = 'sum';
       sum.textContent = tr('summary', removed, changed, kept);
       box.append(sum);
