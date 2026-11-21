@@ -311,7 +311,7 @@ async function show(files) {
   const fd = new FormData();
   for (const f of state.selected) fd.append('files', f);
   try {
-    state.info = await (await fetch('/inspect', { method: 'POST', body: fd })).json();
+    state.info = await (await fetch('/inspect', { method: 'POST', headers: { 'X-MDC': '1' }, body: fd })).json();
   } catch (e) { setStatus('error', String(e)); return render(); }
   state.phase = 'inspected'; setStatus(null); render();
 }
@@ -321,7 +321,7 @@ async function upload() {
   for (const f of state.selected) fd.append('files', f);
   state.phase = 'idle'; setStatus('deleting'); render();
   let r, j;
-  try { r = await fetch('/clean', { method: 'POST', body: fd }); j = await r.json(); }
+  try { r = await fetch('/clean', { method: 'POST', headers: { 'X-MDC': '1' }, body: fd }); j = await r.json(); }
   catch (e) { state.phase = 'inspected'; setStatus('error', String(e)); return render(); }
   state.report = j.files || null;
   if (!r.ok) { state.phase = 'inspected'; setStatus('failed'); return render(); }
@@ -334,7 +334,8 @@ async function download() {
   const cd = d.headers.get('Content-Disposition') || '';
   const a = document.createElement('a');
   a.href = URL.createObjectURL(await d.blob());
-  a.download = (cd.match(/filename="(.+)"/) || [])[1] || 'cleaned';
+  const star = cd.match(/filename\*=UTF-8''([^;]+)/);
+  a.download = star ? decodeURIComponent(star[1]) : 'cleaned';
   a.click();
   state.token = null; render();
 }

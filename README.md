@@ -66,6 +66,7 @@ run.sh                 Launcher: installs tools, venv, server, opens browser
 Metadata Cleaner.app   Double-click launcher (opens the .command in Terminal)
 Metadata Cleaner.command  Runs run.sh in Terminal
 requirements.txt       fastapi, uvicorn, python-multipart
+tests/                 Security and cleaning tests (pytest)
 ```
 
 ### Endpoints
@@ -74,11 +75,33 @@ requirements.txt       fastapi, uvicorn, python-multipart
 |---|---|
 | `GET /` | The web page |
 | `GET /tools` | Which external tools are installed |
+| `GET /health` | Liveness check used by `run.sh` |
 | `POST /inspect` | Upload files, get their current metadata as JSON |
 | `POST /clean` | Upload files, get a before/after report and a download token |
 | `GET /download/{token}` | One-time download of the cleaned file or zip |
 
-Cleaned files are kept in a temp folder until downloaded (or until the server exits).
+Cleaned files are kept in a temp folder until downloaded, for at most 10 minutes.
+
+## Security
+
+- The server listens on `127.0.0.1` only, rejects requests whose `Host` is not `127.0.0.1`/`localhost` (DNS rebinding), and rejects cross-site POSTs (`Origin` must match and the `X-MDC` header is required).
+- Limits: 20 files per request, 300 MB per file, 1 GB per request.
+- ffmpeg runs with a forced input format and a protocol whitelist, so a disguised playlist cannot make it read other files or URLs.
+- Cleaned files expire after 10 minutes, are removed on shutdown (including closing the Terminal window), and leftovers from a crash are purged at the next start.
+- No access log is written, and error messages shown in the UI or `ERRORS.txt` never include temp paths or file content. `run.sh` starts uvicorn with `--no-access-log --log-level warning`.
+- Responses send `no-store`, `nosniff`, `no-referrer` and a strict Content-Security-Policy.
+
+## Tests
+
+The tests in `tests/` cover these protections (host/origin checks, limits, safe error messages, filenames in downloads, expiry) and a real clean of a JPEG and an MP4.
+
+```sh
+python3 -m venv .venv                      # skip if run.sh already created it
+.venv/bin/pip install -r requirements.txt pytest httpx2 pillow
+.venv/bin/python -m pytest -q tests
+```
+
+Tests that need `exiftool` or `ffmpeg` are skipped when those tools are not installed (`brew install exiftool ffmpeg`).
 
 ## Limitations
 
@@ -86,4 +109,4 @@ Cleaned files are kept in a temp folder until downloaded (or until the server ex
 - Cleaning needs the matching tool installed; otherwise that file reports an error naming the missing tool.
 - Error messages from the server and metadata tag names are not translated.
 - Verify any result yourself with `exiftool -a -G1 file`.
-- There is no automated test suite yet.
+- Automated tests cover the security protections and basic JPEG/MP4 cleaning, not every file type.

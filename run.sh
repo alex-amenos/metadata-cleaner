@@ -6,7 +6,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 PORT="${PORT:-8000}"
 
 # Already running (e.g. app opened twice): just open the browser.
-if curl -fs --max-time 2 "http://127.0.0.1:$PORT/tools" 2>/dev/null | grep -q exiftool; then
+if curl -fs --max-time 2 "http://127.0.0.1:$PORT/health" 2>/dev/null | grep -q metadata-cleaner; then
   [ -n "$NO_OPEN" ] || open "http://127.0.0.1:$PORT"
   exit 0
 fi
@@ -23,8 +23,13 @@ command -v soffice >/dev/null || echo "Note: LibreOffice not found; legacy .doc 
 
 PY=$(command -v python3) || { echo "python3 not found (xcode-select --install or brew install python)" >&2; exit 1; }
 [ -d .venv ] || "$PY" -m venv .venv
-.venv/bin/pip install -q -r requirements.txt
+# Install only when requirements change (fewer network fetches of third-party code).
+if ! cmp -s requirements.txt .venv/.requirements.installed; then
+  .venv/bin/pip install -q -r requirements.txt
+  cp requirements.txt .venv/.requirements.installed
+fi
 
 [ -n "$NO_OPEN" ] || { (sleep 2 && open "http://127.0.0.1:$PORT") & }
 # Bound to localhost only.
-exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "$PORT"
+# No access log: request lines and download tokens are not written anywhere.
+exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "$PORT" --no-access-log --log-level warning
