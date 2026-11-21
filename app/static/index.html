@@ -44,7 +44,15 @@
   .sum { font-size: .85rem; margin: 0 0 .5rem; }
   .err { color: #b00020; font-size: .85rem; }
   #status, #tools { margin-top: 1rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-  #tools { color: #666; font-size: .85rem; }
+  #tools { display: flex; align-items: center; gap: .5rem; color: #666; font-size: .85rem; }
+  #tools span { overflow-wrap: anywhere; }
+  #info { flex: none; margin: 0; padding: 0; width: 1.5rem; height: 1.5rem; border-radius: 50%; border: 1.5px solid #0a64d8; background: #fff; color: #0a64d8; font: italic 700 .85rem Georgia, serif; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+  #info:hover, #info[aria-expanded="true"] { background: #0a64d8; color: #fff; }
+  #infoPanel { display: none; margin-top: .75rem; border: 1px solid #ccc; border-radius: 8px; padding: .75rem 1rem; font-size: .85rem; background: #fafafa; }
+  #infoPanel h2 { margin: 0 0 .5rem; font-size: 1rem; }
+  #infoPanel p { margin: .6rem 0 .25rem; }
+  #infoPanel pre { margin: 0; padding: .5rem .75rem; background: #1c1c1e; color: #f2f2f7; border-radius: 6px; overflow-x: auto; user-select: all; font-size: .8rem; }
+  #infoPanel ul { margin: .25rem 0 0; padding-left: 1.2rem; }
   @media (max-width: 480px) {
     .actions button { flex: 1 1 100%; }
     .file { padding: .6rem .75rem; }
@@ -75,7 +83,8 @@
   <button id="download" type="button" data-i18n="download"></button>
 </div>
 <div id="status"></div>
-<div id="tools"></div>
+<div id="tools"><span id="toolsText"></span><button id="info" type="button" aria-expanded="false" aria-controls="infoPanel">i</button></div>
+<div id="infoPanel"></div>
 </main>
 <script>
 const I18N = {
@@ -90,6 +99,15 @@ const I18N = {
     dlUnavailable: 'Download unavailable', error: 'Error',
     summary: (r, c, k) => `Removed: ${r} · Changed: ${c} · Remaining: ${k}`,
     tools: 'Tools', missing: 'missing',
+    infoTitle: 'Install the required tools (macOS)',
+    infoBrew: 'If you do not have Homebrew, install it first:',
+    infoTools: 'Then install the tools in Terminal:',
+    infoOptional: 'Optional, only for legacy .doc files:',
+    infoReload: 'When it finishes, reload this page: the list above should show ✓ for each tool.',
+    infoWhat: 'What each tool is for',
+    infoList: ['exiftool: images and PDF metadata', 'ffmpeg: video and audio', 'qpdf: rewrites PDFs to drop old revisions', 'mat2: Word, Excel, PowerPoint and OpenDocument files', 'soffice (LibreOffice): converts legacy .doc'],
+    infoAuto: 'Tip: ./run.sh installs the missing tools automatically.',
+    infoLabel: 'How to install the tools',
   },
   es: {
     title: 'Limpiador de metadatos',
@@ -102,6 +120,15 @@ const I18N = {
     dlUnavailable: 'Descarga no disponible', error: 'Error',
     summary: (r, c, k) => `Eliminados: ${r} · Modificados: ${c} · Restantes: ${k}`,
     tools: 'Herramientas', missing: 'falta',
+    infoTitle: 'Instalar las herramientas necesarias (macOS)',
+    infoBrew: 'Si no tienes Homebrew, instálalo primero:',
+    infoTools: 'Después instala las herramientas en Terminal:',
+    infoOptional: 'Opcional, solo para archivos .doc antiguos:',
+    infoReload: 'Al terminar, recarga esta página: la lista de arriba debería mostrar ✓ en cada herramienta.',
+    infoWhat: 'Para qué sirve cada herramienta',
+    infoList: ['exiftool: metadatos de imágenes y PDF', 'ffmpeg: vídeo y audio', 'qpdf: reescribe PDF para eliminar revisiones antiguas', 'mat2: archivos de Word, Excel, PowerPoint y OpenDocument', 'soffice (LibreOffice): convierte .doc antiguos'],
+    infoAuto: 'Consejo: ./run.sh instala automáticamente las herramientas que falten.',
+    infoLabel: 'Cómo instalar las herramientas',
   },
   ca: {
     title: 'Netejador de metadades',
@@ -114,6 +141,15 @@ const I18N = {
     dlUnavailable: 'Descàrrega no disponible', error: 'Error',
     summary: (r, c, k) => `Eliminades: ${r} · Modificades: ${c} · Restants: ${k}`,
     tools: 'Eines', missing: 'falta',
+    infoTitle: 'Instal·lar les eines necessàries (macOS)',
+    infoBrew: 'Si no tens Homebrew, instal·la\'l primer:',
+    infoTools: 'Després instal·la les eines al Terminal:',
+    infoOptional: 'Opcional, només per a fitxers .doc antics:',
+    infoReload: 'Quan acabi, recarrega aquesta pàgina: la llista de dalt hauria de mostrar ✓ a cada eina.',
+    infoWhat: 'Per a què serveix cada eina',
+    infoList: ['exiftool: metadades d\'imatges i PDF', 'ffmpeg: vídeo i àudio', 'qpdf: reescriu PDF per eliminar revisions antigues', 'mat2: fitxers de Word, Excel, PowerPoint i OpenDocument', 'soffice (LibreOffice): converteix .doc antics'],
+    infoAuto: 'Consell: ./run.sh instal·la automàticament les eines que faltin.',
+    infoLabel: 'Com instal·lar les eines',
   },
 };
 
@@ -126,7 +162,7 @@ const guess = (navigator.language || 'en').slice(0, 2);
 let lang = I18N[saved] ? saved : (I18N[guess] ? guess : 'en');
 
 // phase: idle | inspected | cleaned. status is [key, extra] so it can be re-translated.
-const state = { selected: [], info: null, report: null, token: null, phase: 'idle', status: null, tools: null };
+const state = { infoOpen: false, selected: [], info: null, report: null, token: null, phase: 'idle', status: null, tools: null };
 const tr = (k, ...a) => { const v = I18N[lang][k]; return typeof v === 'function' ? v(...a) : v; };
 const fmt = v => typeof v === 'object' ? JSON.stringify(v) : String(v);
 const setStatus = (key, extra = '') => { state.status = key ? [key, extra] : null; };
@@ -203,6 +239,29 @@ function renderDiff() {
   }
 }
 
+const BREW_INSTALL = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"';
+
+function renderInfo2() {
+  const btn = $('info'), panel = $('infoPanel');
+  btn.setAttribute('aria-label', tr('infoLabel')); btn.title = tr('infoLabel');
+  btn.setAttribute('aria-expanded', String(state.infoOpen));
+  panel.style.display = state.infoOpen ? 'block' : 'none';
+  panel.replaceChildren();
+  if (!state.infoOpen) return;
+  const el = (tag, text) => { const e = document.createElement(tag); if (text) e.textContent = text; return e; };
+  const code = c => el('pre', c);
+  const ul = el('ul'); tr('infoList').forEach(x => ul.append(el('li', x)));
+  panel.append(
+    el('h2', tr('infoTitle')),
+    el('p', '1. ' + tr('infoBrew')), code(BREW_INSTALL),
+    el('p', '2. ' + tr('infoTools')), code('brew install exiftool ffmpeg qpdf mat2'),
+    el('p', '3. ' + tr('infoOptional')), code('brew install --cask libreoffice'),
+    el('p', '4. ' + tr('infoReload')),
+    el('p', tr('infoWhat') + ':'), ul,
+    el('p', tr('infoAuto')),
+  );
+}
+
 function render() {
   document.documentElement.lang = lang;
   document.title = tr('title');
@@ -218,7 +277,9 @@ function render() {
   statusEl.textContent = state.status
     ? tr(state.status[0]) + (state.status[1] ? ': ' + state.status[1] : '') : '';
 
-  $('tools').textContent = state.tools
+  renderInfo2();
+
+  $('toolsText').textContent = state.tools
     ? tr('tools') + ': ' + Object.entries(state.tools)
         .map(([k, v]) => `${k} ${v ? '✓' : '✗ ' + tr('missing')}`).join('  ')
     : '';
@@ -267,6 +328,7 @@ drop.ondragleave = () => drop.classList.remove('over');
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); show(e.dataTransfer.files); };
 cleanBtn.onclick = upload;
 dlBtn.onclick = download;
+$('info').onclick = () => { state.infoOpen = !state.infoOpen; render(); };
 langSel.onchange = () => { lang = langSel.value; localStorage.setItem('lang', lang); render(); };
 
 render();
