@@ -6,11 +6,17 @@ A local-only web UI (FastAPI) that strips metadata from documents, PDFs, images,
 
 Requires [Homebrew](https://brew.sh) and Python 3 (`xcode-select --install` provides one).
 
+**No Terminal:** double-click `Metadata Cleaner.app`. It installs any missing tools on first run (can take a few minutes), starts the server in the background and opens your browser. Open it again while running to get **Open** or **Stop server**. Logs: `~/Library/Logs/MetadataCleaner.log`. Keep the app inside this folder.
+
+If macOS blocks it (Gatekeeper, e.g. after downloading a zip), right-click → Open once, or run `xattr -dr com.apple.quarantine .` in the folder.
+
+**Terminal alternative:**
+
 ```sh
-./run.sh        # or double-click "Metadata Cleaner.command" in Finder
+./run.sh        # or double-click "Metadata Cleaner.command"
 ```
 
-The launcher installs any missing tools (`exiftool ffmpeg qpdf mat2`), creates a virtualenv, starts the server on `127.0.0.1:8000` (override with `PORT=9000 ./run.sh`) and opens your browser. On first double-click, macOS may require right-click → Open (Gatekeeper), or `chmod +x` if the executable bit was lost.
+Both start the server on `127.0.0.1:8000` (override with `PORT=9000 ./run.sh`).
 
 For legacy `.doc` support: `brew install --cask libreoffice`.
 

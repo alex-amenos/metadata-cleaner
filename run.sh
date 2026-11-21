@@ -19,6 +19,6 @@ PY=$(command -v python3) || { echo "python3 not found (xcode-select --install or
 .venv/bin/pip install -q -r requirements.txt
 
 PORT="${PORT:-8000}"
-(sleep 2 && open "http://127.0.0.1:$PORT") &
+[ -n "$NO_OPEN" ] || { (sleep 2 && open "http://127.0.0.1:$PORT") & }
 # Bound to localhost only.
 exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "$PORT"
