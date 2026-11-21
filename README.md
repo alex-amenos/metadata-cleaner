@@ -1,41 +1,88 @@
 # Metadata Cleaner
 
-A local-only web UI (FastAPI) that strips metadata from documents, PDFs, images, video and audio on macOS. The server binds to `127.0.0.1`; files never leave your machine and temp files are deleted after processing.
+A local web app that removes metadata from documents, PDFs, images, video and audio. It runs on your Mac: the server only listens on `127.0.0.1`, files never leave your machine, and temporary files are deleted after use.
+
+## How it works
+
+1. Drag files onto the page or click **Choose files**. Their current metadata is listed.
+2. Click **Delete metadata**. A before/after diff shows what was removed (red), changed (yellow) and what remains (grey).
+3. Click **Download clean copy**.
+
+Your originals are never modified. The result is a new file named `<name>_clean.<ext>` (legacy `.doc` becomes `<name>_clean.docx`), and each result card labels which file is the original and which is the metadata-free copy. Several files, or any failure, download as a zip; `ERRORS.txt` lists files that failed.
+
+The interface is available in English, Castellano and Català (selector at the top right). It follows the browser language and remembers your choice. The page is responsive and uses a dark theme.
 
 ## Run on macOS
 
 Requires [Homebrew](https://brew.sh) and Python 3 (`xcode-select --install` provides one).
 
-**No Terminal:** double-click `Metadata Cleaner.app`. It installs any missing tools on first run (can take a few minutes), starts the server in the background and opens your browser. Open it again while running to get **Open** or **Stop server**. Logs: `~/Library/Logs/MetadataCleaner.log`. Keep the app inside this folder.
+**Without Terminal:** double-click `Metadata Cleaner.app`.
 
-If macOS blocks it (Gatekeeper, e.g. after downloading a zip), right-click → Open once, or run `xattr -dr com.apple.quarantine .` in the folder.
+- It installs any missing tools on first run (this can take a few minutes), starts the server in the background and opens your browser.
+- Open it again while it is running to choose **Open** or **Stop server**.
+- Logs: `~/Library/Logs/MetadataCleaner.log`.
+- Keep the app inside this folder; it uses `run.sh` next to it.
+- If macOS blocks it (Gatekeeper, for example after downloading a zip), right-click → Open once, or run `xattr -dr com.apple.quarantine .` in this folder.
 
-**Terminal alternative:**
+**With Terminal:**
 
 ```sh
 ./run.sh        # or double-click "Metadata Cleaner.command"
 ```
 
-Both start the server on `127.0.0.1:8000` (override with `PORT=9000 ./run.sh`).
+`run.sh` installs missing tools, creates `.venv`, starts the server and opens the browser. Use `PORT=9000 ./run.sh` for another port (the `.app` honours `PORT` too).
 
-For legacy `.doc` support: `brew install --cask libreoffice`.
+### Install the tools manually
 
-Selecting or dropping files lists their current metadata. **Borrar metadatos** cleans them and shows a before/after diff (red = removed, yellow = changed, grey = remaining); then **Descargar** saves a copy named `<name>_clean.<ext>` (legacy `.doc` becomes `<name>_clean.docx`). The original is never modified, and the UI labels which file is the original and which is the new metadata-free copy. Multiple files (or any failures) download as a zip, with `ERRORS.txt` listing failed files.
+```sh
+brew install exiftool ffmpeg qpdf mat2
+brew install --cask libreoffice   # optional, only for legacy .doc
+```
 
-The UI language (English, Castellano, Català) can be switched from the selector at the top right; it defaults to the browser language and is remembered.
+The **i** button next to *Tools* in the page shows these steps. The *Tools* line shows ✓ or ✗ for each tool.
 
-## Tools per type
+## What cleans what
 
-| Type | Tool |
+| Type | Extensions | Tool |
+|---|---|---|
+| Images | jpg, jpeg, png, gif, tif, tiff, webp, heic, bmp | `exiftool -all=` |
+| Video | mp4, mov, m4v, mkv, avi, webm | `ffmpeg -map_metadata -1 -c copy` (no re-encode) |
+| Audio | mp3, m4a, flac, wav, ogg, aac, opus | `ffmpeg -map_metadata -1 -c copy` |
+| PDF | pdf | `exiftool`, then `qpdf` rewrite to drop old revisions |
+| Office | docx, xlsx, pptx, odt, ods, odp | `mat2` |
+| Legacy Word | doc | LibreOffice converts to docx, then `mat2` |
+
+The real file type is detected from the file content for JPEG, PNG, GIF, TIFF, WebP and PDF, so a JPEG named `.png` still works (the copy gets the correct extension). Other types rely on the filename extension.
+
+Metadata is read and compared with `exiftool -json -a -G1`.
+
+## Project layout
+
+```
+app/main.py            FastAPI app: file-type routing, cleaners, endpoints
+app/static/index.html  Single-page UI (vanilla JS, i18n, diff view)
+run.sh                 Launcher: installs tools, venv, server, opens browser
+Metadata Cleaner.app   Double-click launcher (no Terminal)
+Metadata Cleaner.command  Double-click launcher (opens Terminal)
+requirements.txt       fastapi, uvicorn, python-multipart
+```
+
+### Endpoints
+
+| Endpoint | Purpose |
 |---|---|
-| Images | `exiftool -all=` |
-| Video / audio | `ffmpeg -map_metadata -1 -c copy` (no re-encode) |
-| PDF | `exiftool` + `qpdf` rewrite (drops old revisions) |
-| docx/xlsx/pptx/odf | `mat2` |
-| doc | LibreOffice → docx, then `mat2` |
+| `GET /` | The web page |
+| `GET /tools` | Which external tools are installed |
+| `POST /inspect` | Upload files, get their current metadata as JSON |
+| `POST /clean` | Upload files, get a before/after report and a download token |
+| `GET /download/{token}` | One-time download of the cleaned file or zip |
 
-## Caveats
+Cleaned files are kept in a temp folder until downloaded (or until the server exits).
 
-- Embedded content (hidden text, tracked changes, watermarks, pixels) is not metadata and is not removed.
-- Verify results with `exiftool -a -G1 file`.
-- `/tools` shows which required tools are installed.
+## Limitations
+
+- Embedded content (hidden text, tracked changes, watermarks, the image pixels themselves) is not metadata and is not removed.
+- Cleaning needs the matching tool installed; otherwise that file reports an error naming the missing tool.
+- Error messages from the server and metadata tag names are not translated.
+- Verify any result yourself with `exiftool -a -G1 file`.
+- There is no automated test suite yet.
