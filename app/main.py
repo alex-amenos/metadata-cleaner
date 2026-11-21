@@ -1,5 +1,6 @@
 """Local-only metadata cleaner. Binds to 127.0.0.1; files never leave the machine."""
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -117,6 +118,35 @@ async def clean(files: list[UploadFile] = File(...)):
             z.writestr("ERRORS.txt", "\n".join(f"{k}: {v}" for k, v in errors.items()))
     return Response(buf.getvalue(), media_type="application/zip",
                     headers={"Content-Disposition": 'attachment; filename="cleaned.zip"'})
+
+
+def inspect_one(name: str, data: bytes) -> dict:
+    ext = Path(name).suffix.lower()
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / f"input{ext}"
+        src.write_bytes(data)
+        if shutil.which("exiftool") is None:
+            raise RuntimeError("'exiftool' is not installed (brew install exiftool)")
+        r = subprocess.run(["exiftool", "-json", "-a", "-G1", str(src)],
+                           capture_output=True, text=True, timeout=120)
+        if r.returncode != 0:
+            raise RuntimeError((r.stderr or r.stdout).strip()[:500])
+        tags = json.loads(r.stdout)[0]
+    # Drop tags about the temp file itself, not the user's metadata.
+    return {k: v for k, v in tags.items()
+            if k != "SourceFile" and not k.startswith(("System:", "ExifTool:"))}
+
+
+@app.post("/inspect")
+async def inspect(files: list[UploadFile] = File(...)):
+    out = {}
+    for f in files:
+        name = f.filename or "file"
+        try:
+            out[name] = {"tags": inspect_one(name, await f.read())}
+        except Exception as e:
+            out[name] = {"error": str(e)}
+    return out
 
 
 @app.get("/tools")

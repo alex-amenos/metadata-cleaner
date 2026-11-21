@@ -9,6 +9,13 @@
   #drop.over { background: #eef; }
   #pick { margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; border-radius: 8px; border: 0; background: #0a64d8; color: #fff; cursor: pointer; }
   #pick:hover { background: #0852b3; }
+  .file { margin-top: 1rem; border: 1px solid #ccc; border-radius: 8px; padding: .5rem .8rem; }
+  .file h3 { margin: .2rem 0; word-break: break-all; font-size: 1rem; }
+  .file table { font-size: .8rem; border-collapse: collapse; width: 100%; }
+  .file td { border-top: 1px solid #eee; padding: 2px 4px; vertical-align: top; word-break: break-all; }
+  .file td:first-child { color: #666; width: 40%; }
+  .err { color: #b00020; font-size: .85rem; }
+  #clean { display: none; margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; border-radius: 8px; border: 0; background: #1a8f3c; color: #fff; cursor: pointer; }
   #status, #tools { margin-top: 1rem; white-space: pre-wrap; }
   #tools { color: #666; font-size: .85rem; }
 </style>
@@ -22,22 +29,62 @@
   <button id="pick" type="button">Seleccionar archivos / Choose files</button>
 </div>
 <input id="file" type="file" multiple hidden>
+<div id="list"></div>
+<button id="clean" type="button">Limpiar metadatos / Clean metadata</button>
 <div id="status"></div>
 <div id="tools"></div>
 <script>
 const drop = document.getElementById('drop'), input = document.getElementById('file'),
       status = document.getElementById('status');
+const list = document.getElementById('list'), cleanBtn = document.getElementById('clean');
+let selected = [];
 document.getElementById('pick').onclick = () => input.click();
-input.onchange = () => { upload(input.files); input.value = ''; };
+input.onchange = () => { show(input.files); input.value = ''; };
 drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
 drop.ondragleave = () => drop.classList.remove('over');
-drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); upload(e.dataTransfer.files); };
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); show(e.dataTransfer.files); };
+cleanBtn.onclick = () => upload(selected);
+
+// Metadata is untrusted file content: render with textContent only.
+async function show(files) {
+  selected = [...files];
+  list.replaceChildren(); cleanBtn.style.display = 'none'; status.textContent = '';
+  if (!selected.length) return;
+  status.textContent = 'Leyendo metadatos / Reading metadata...';
+  const fd = new FormData();
+  for (const f of selected) fd.append('files', f);
+  let info = {};
+  try { info = await (await fetch('/inspect', { method: 'POST', body: fd })).json(); }
+  catch (e) { status.textContent = 'Error: ' + e; return; }
+  status.textContent = '';
+  for (const f of selected) {
+    const box = document.createElement('div'); box.className = 'file';
+    const h = document.createElement('h3'); h.textContent = f.name; box.append(h);
+    const d = info[f.name] || {};
+    const entries = Object.entries(d.tags || {});
+    if (d.error) {
+      const p = document.createElement('div'); p.className = 'err'; p.textContent = d.error; box.append(p);
+    } else if (!entries.length) {
+      box.append('Sin metadatos / No metadata found');
+    } else {
+      const t = document.createElement('table');
+      for (const [k, v] of entries) {
+        const tr = t.insertRow();
+        tr.insertCell().textContent = k;
+        tr.insertCell().textContent = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      }
+      box.append(t);
+    }
+    list.append(box);
+  }
+  cleanBtn.style.display = 'inline-block';
+}
 
 async function upload(files) {
   if (!files.length) return;
   const fd = new FormData();
   for (const f of files) fd.append('files', f);
-  status.textContent = 'Cleaning...';
+  status.textContent = 'Limpiando / Cleaning...';
   const r = await fetch('/clean', { method: 'POST', body: fd });
   if (!r.ok) {
     const j = await r.json().catch(() => ({}));
@@ -49,7 +96,7 @@ async function upload(files) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(await r.blob());
   a.download = name; a.click();
-  status.textContent = 'Done: ' + name;
+  status.textContent = 'Listo / Done: ' + name;
 }
 fetch('/tools').then(r => r.json()).then(t => {
   document.getElementById('tools').textContent = 'Tools: ' +
