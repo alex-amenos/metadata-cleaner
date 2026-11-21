@@ -5,8 +5,10 @@
 <title>Metadata Cleaner</title>
 <style>
   body { font-family: system-ui; max-width: 640px; margin: 3rem auto; padding: 0 1rem; }
-  #drop { border: 2px dashed #888; border-radius: 12px; padding: 3rem; text-align: center; cursor: pointer; }
+  #drop { border: 2px dashed #888; border-radius: 12px; padding: 3rem; text-align: center; }
   #drop.over { background: #eef; }
+  #pick { margin-top: 1rem; padding: .6rem 1.2rem; font-size: 1rem; border-radius: 8px; border: 0; background: #0a64d8; color: #fff; cursor: pointer; }
+  #pick:hover { background: #0852b3; }
   #status, #tools { margin-top: 1rem; white-space: pre-wrap; }
   #tools { color: #666; font-size: .85rem; }
 </style>
@@ -14,15 +16,19 @@
 <body>
 <h1>Metadata Cleaner</h1>
 <p>Runs locally. Drop documents, PDFs, images, video or audio to strip metadata.</p>
-<div id="drop">Drop files here or click to choose</div>
+<div id="drop">
+  <div>Arrastra archivos aquí / Drag files here</div>
+  <div>o / or</div>
+  <button id="pick" type="button">Seleccionar archivos / Choose files</button>
+</div>
 <input id="file" type="file" multiple hidden>
 <div id="status"></div>
 <div id="tools"></div>
 <script>
 const drop = document.getElementById('drop'), input = document.getElementById('file'),
       status = document.getElementById('status');
-drop.onclick = () => input.click();
-input.onchange = () => upload(input.files);
+document.getElementById('pick').onclick = () => input.click();
+input.onchange = () => { upload(input.files); input.value = ''; };
 drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
 drop.ondragleave = () => drop.classList.remove('over');
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); upload(e.dataTransfer.files); };
