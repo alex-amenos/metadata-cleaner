@@ -40,6 +40,10 @@
   #pick:hover, #download:hover { background: var(--blue-hover); }
   #clean { display: none; background: var(--green); }
   #download { display: none; }
+  .options { margin-top: 1rem; border: 1px solid var(--border); border-radius: 8px; padding: .75rem 1rem; background: var(--panel); font-size: .85rem; }
+  .options label { font-size: .95rem; cursor: pointer; }
+  .options input { accent-color: var(--blue); margin-right: .4rem; }
+  .options ul { margin: .5rem 0 0; padding-left: 1.2rem; color: var(--muted); }
   .actions { display: flex; flex-wrap: wrap; gap: .75rem; }
   .actions button { margin-top: 1rem; }
   .file { margin-top: 1rem; border: 1px solid var(--border); border-radius: 8px; padding: .75rem 1rem; background: var(--panel); }
@@ -96,6 +100,14 @@
 </div>
 <input id="file" type="file" multiple hidden>
 <div id="list"></div>
+<div class="options">
+  <label><input type="checkbox" id="keepComments"> <span data-i18n="keepLabel"></span></label>
+  <ul>
+    <li data-i18n="noteDocs"></li>
+    <li data-i18n="notePdf"></li>
+    <li data-i18n="noteMedia"></li>
+  </ul>
+</div>
 <div class="actions">
   <button id="clean" type="button" data-i18n="del"></button>
   <button id="download" type="button" data-i18n="download"></button>
@@ -107,6 +119,7 @@
 <script>
 const I18N = {
   en: {
+    keepLabel: 'Keep comments (default: remove them)', noteDocs: 'Word, Excel, PowerPoint, OpenDocument: comments and tracked changes are removed by default. If kept, only author, dates and other properties are cleared.', notePdf: 'PDF: comments (notes, highlights, stamps) are removed by default. Links and form fields are always kept.', noteMedia: 'Images, video, audio: embedded comments (e.g. EXIF UserComment) are always removed.',
     title: 'Metadata Cleaner',
     intro: 'Remove metadata from documents, PDFs, images, video and audio. Drop or choose files, review their metadata, delete it and download a clean copy. Everything runs on your Mac and your originals are never modified.',
     dragHere: 'Drag files here', or: 'or', choose: 'Choose files',
@@ -128,6 +141,7 @@ const I18N = {
     infoLabel: 'How to install the tools',
   },
   es: {
+    keepLabel: 'Mantener comentarios (por defecto se borran)', noteDocs: 'Word, Excel, PowerPoint, OpenDocument: por defecto se borran los comentarios y los cambios con control de cambios. Si los mantienes, solo se limpian autor, fechas y otras propiedades.', notePdf: 'PDF: por defecto se borran los comentarios (notas, resaltados, sellos). Los enlaces y campos de formulario siempre se mantienen.', noteMedia: 'Imágenes, vídeo, audio: los comentarios incrustados (p. ej. EXIF UserComment) siempre se borran.',
     title: 'Limpiador de metadatos',
     intro: 'Elimina metadatos de documentos, PDF, imágenes, vídeo y audio. Arrastra o selecciona archivos, revisa sus metadatos, bórralos y descarga una copia limpia. Todo se ejecuta en tu Mac y tus originales no se modifican nunca.',
     dragHere: 'Arrastra archivos aquí', or: 'o', choose: 'Seleccionar archivos',
@@ -149,6 +163,7 @@ const I18N = {
     infoLabel: 'Cómo instalar las herramientas',
   },
   ca: {
+    keepLabel: 'Mantén els comentaris (per defecte s\'esborren)', noteDocs: 'Word, Excel, PowerPoint, OpenDocument: per defecte s\'esborren els comentaris i els canvis amb control de canvis. Si els mantens, només es netegen autor, dates i altres propietats.', notePdf: 'PDF: per defecte s\'esborren els comentaris (notes, ressaltats, segells). Els enllaços i camps de formulari sempre es mantenen.', noteMedia: 'Imatges, vídeo, àudio: els comentaris incrustats (p. ex. EXIF UserComment) sempre s\'esborren.',
     title: 'Netejador de metadades',
     intro: 'Elimina les metadades de documents, PDF, imatges, vídeo i àudio. Arrossega o selecciona fitxers, revisa\'n les metadades, esborra-les i descarrega una còpia neta. Tot s\'executa al teu Mac i els originals no es modifiquen mai.',
     dragHere: 'Arrossega els fitxers aquí', or: 'o', choose: 'Selecciona fitxers',
@@ -319,6 +334,7 @@ async function show(files) {
 async function upload() {
   const fd = new FormData();
   for (const f of state.selected) fd.append('files', f);
+  fd.append('keep_comments', document.getElementById('keepComments').checked ? 'true' : 'false');
   state.phase = 'idle'; setStatus('deleting'); render();
   let r, j;
   try { r = await fetch('/clean', { method: 'POST', headers: { 'X-MDC': '1' }, body: fd }); j = await r.json(); }

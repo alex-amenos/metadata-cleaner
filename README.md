@@ -93,7 +93,7 @@ Cleaned files are kept in a temp folder until downloaded, for at most 10 minutes
 
 ## Tests
 
-The tests in `tests/` cover these protections (host/origin checks, limits, safe error messages, filenames in downloads, expiry) and a real clean of a JPEG and an MP4.
+The tests in `tests/` (`test_security.py`, `test_comments.py`) cover these protections (host/origin checks, limits, safe error messages, filenames in downloads, expiry) and a real clean of a JPEG and an MP4.
 
 ```sh
 python3 -m venv .venv                      # skip if run.sh already created it
@@ -106,8 +106,9 @@ Tests that need `exiftool` or `ffmpeg` are skipped when those tools are not inst
 ## Limitations
 
 - Embedded content (hidden text, watermarks, the image pixels themselves) is not metadata and is not removed.
-- **Documents may lose content.** mat2 removes comments, tracked changes and author info from Office files, so those are lost in the clean copy. `.doc` is converted to `.docx` through LibreOffice first, which can shift complex formatting. PDF annotations/comments may remain and can still contain author names. This is not yet verified with real documents: check the result before discarding the original (it is never modified, the copy is `<name>_clean.<ext>`).
+- **Comments:** by default comments are removed; tick **Keep comments** to keep them. Office files (docx/xlsx/pptx/odt...): default uses mat2, which also removes tracked changes; with *Keep comments* only the document properties and thumbnail are blanked (a lighter clean than mat2). PDF: comment annotations (notes, highlights, stamps) are removed by default; links and form fields are always kept. Images/video/audio: embedded comments are always removed. The page explains this next to the option.
+- **Documents may lose content.** With the default, comments and tracked changes are lost in the clean copy. `.doc` is converted to `.docx` through LibreOffice first, which can shift complex formatting. PDF annotations/comments may remain and can still contain author names. This is not yet verified with real documents: check the result before discarding the original (it is never modified, the copy is `<name>_clean.<ext>`).
 - Cleaning needs the matching tool installed; otherwise that file reports an error naming the missing tool.
 - Error messages from the server and metadata tag names are not translated.
 - Verify any result yourself with `exiftool -a -G1 file`.
-- Automated tests cover the security protections and basic JPEG/MP4 cleaning, not documents (docx, doc, PDF).
+- Automated tests cover the security protections, JPEG/MP4 cleaning, and the keep/remove comments option for docx and PDF. The mat2 path and `.doc` conversion are not tested.

@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote, urlsplit
 
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -170,7 +170,45 @@ def clean_ffmpeg(src: Path) -> Path:
     return out
 
 
-def clean_pdf(src: Path) -> Path:
+KEEP_ANNOTS = {"/Link", "/Widget"}  # links and form fields are content, not comments
+
+
+def strip_pdf_comments(src: Path) -> Path:
+    """Remove comment-type annotations (notes, highlights, stamps, ...) with qpdf's JSON round trip."""
+    dump = Path(f"{src}.json")
+    out = src.with_name("nocomments.pdf")
+    run(["qpdf", "--json=2", "--json-key=qpdf", str(src), str(dump)])
+    objs = json.loads(dump.read_text())["qpdf"][1]
+
+    def value(ref):
+        return objs.get(f"obj:{ref}", {}).get("value") if isinstance(ref, str) else None
+
+    update = {}
+    for key, obj in objs.items():
+        v = obj.get("value") if isinstance(obj, dict) else None
+        if not isinstance(v, dict) or v.get("/Type") != "/Page" or "/Annots" not in v:
+            continue
+        annots = v["/Annots"]
+        holder = None
+        if isinstance(annots, str):  # indirect array
+            holder = f"obj:{annots}"
+            annots = value(annots)
+        if not isinstance(annots, list):
+            continue
+        kept = [a for a in annots if (value(a) or {}).get("/Subtype") in KEEP_ANNOTS]
+        if holder:
+            update[holder] = {"value": kept}
+        else:
+            update[key] = {"value": {**v, "/Annots": kept or None}}
+    dump.write_text(json.dumps({"version": 2, "qpdf": [{"jsonversion": 2, "pdfversion": "1.7"}, update]}))
+    run(["qpdf", str(src), "--update-from-json=" + str(dump), str(out)])
+    dump.unlink()
+    return out
+
+
+def clean_pdf(src: Path, keep_comments: bool = False) -> Path:
+    if not keep_comments:
+        src = strip_pdf_comments(src)
     run(["exiftool", "-all=", "-overwrite_original", str(src)])
     out = src.with_name("clean.pdf")
     # Rewriting drops the old revisions exiftool leaves behind.
@@ -179,7 +217,43 @@ def clean_pdf(src: Path) -> Path:
     return out
 
 
-def clean_mat2(src: Path) -> Path:
+EMPTY_PARTS = {
+    "docProps/core.xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                         '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"/>',
+    "docProps/app.xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                        '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"/>',
+    "docProps/custom.xml": '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                           '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties"/>',
+    "meta.xml": '<?xml version="1.0" encoding="UTF-8"?>'
+                '<office:document-meta xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" office:version="1.2"/>',
+}
+DROP_PARTS = {"docProps/thumbnail.jpeg", "docProps/thumbnail.png", "Thumbnails/thumbnail.png"}
+
+
+def clean_office_keep_comments(src: Path) -> Path:
+    """Blank only the document properties; comments and tracked changes stay (mat2 always removes them)."""
+    out = src.with_name(f"{src.stem}.cleaned{src.suffix}")
+    try:
+        with zipfile.ZipFile(src) as zin, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                if item.filename in DROP_PARTS:
+                    continue
+                data = zin.read(item.filename)
+                if item.filename in EMPTY_PARTS:
+                    data = EMPTY_PARTS[item.filename].encode()
+                elif item.filename == "_rels/.rels":
+                    data = re.sub(rb"<Relationship\b[^>]*thumbnail[^>]*/>", b"", data)
+                elif item.filename == "META-INF/manifest.xml":
+                    data = re.sub(rb"<manifest:file-entry\b[^>]*Thumbnails/[^>]*/>", b"", data)
+                zout.writestr(item, data)
+    except zipfile.BadZipFile:
+        raise UserError("not a valid document") from None
+    return out
+
+
+def clean_mat2(src: Path, keep_comments: bool = False) -> Path:
+    if keep_comments:
+        return clean_office_keep_comments(src)
     run(["mat2", str(src)])
     out = src.with_name(f"{src.stem}.cleaned{src.suffix}")
     if not out.exists():
@@ -187,9 +261,9 @@ def clean_mat2(src: Path) -> Path:
     return out
 
 
-def clean_doc(src: Path) -> Path:
+def clean_doc(src: Path, keep_comments: bool = False) -> Path:
     run(["soffice", "--headless", "--convert-to", "docx", "--outdir", str(src.parent), str(src)])
-    return clean_mat2(src.with_suffix(".docx"))
+    return clean_mat2(src.with_suffix(".docx"), keep_comments)
 
 
 def pick_cleaner(ext: str):
@@ -205,6 +279,8 @@ def pick_cleaner(ext: str):
         return clean_doc
     return None
 
+
+COMMENT_AWARE = {clean_pdf, clean_mat2, clean_doc}
 
 MAGIC = [
     (b"\xff\xd8\xff", ".jpg"), (b"\x89PNG\r\n\x1a\n", ".png"), (b"GIF8", ".gif"),
@@ -239,7 +315,7 @@ def read_tags(path: Path) -> dict:
             if k != "SourceFile" and not k.startswith(("System:", "ExifTool:"))}
 
 
-def clean_one(name: str, data: bytes) -> tuple[str, bytes, dict, dict]:
+def clean_one(name: str, data: bytes, keep_comments: bool = False) -> tuple[str, bytes, dict, dict]:
     name = safe_name(name)
     ext = real_ext(name, data)
     cleaner = pick_cleaner(ext)
@@ -249,7 +325,7 @@ def clean_one(name: str, data: bytes) -> tuple[str, bytes, dict, dict]:
         src = Path(tmp) / f"input{ext}"
         src.write_bytes(data)
         before = read_tags(src)  # must run first: some cleaners edit src in place
-        out = cleaner(src)
+        out = cleaner(src, keep_comments) if cleaner in COMMENT_AWARE else cleaner(src)
         after = read_tags(out)
         # The original is never touched; the result is a copy with a "_clean" suffix.
         out_name = f"{Path(name).stem[:100]}_clean{'.docx' if ext == '.doc' else ext}"
@@ -278,7 +354,7 @@ def too_many(files: list[UploadFile]) -> dict:
 
 
 @app.post("/clean")
-async def clean(files: list[UploadFile] = File(...)):
+async def clean(files: list[UploadFile] = File(...), keep_comments: bool = Form(False)):
     if len(files) > MAX_FILES:
         return JSONResponse({"files": too_many(files)}, status_code=413)
     sweep()
@@ -289,7 +365,7 @@ async def clean(files: list[UploadFile] = File(...)):
     for f in files:
         name = f.filename or "file"
         try:
-            out_name, data, before, after = clean_one(name, await read_upload(f, budget))
+            out_name, data, before, after = clean_one(name, await read_upload(f, budget), keep_comments)
             n = 2
             base = Path(out_name)
             while (outdir / out_name).exists():  # same filename uploaded twice
