@@ -2,16 +2,19 @@
 
 A local-only web UI (FastAPI) that strips metadata from documents, PDFs, images, video and audio on macOS. The server binds to `127.0.0.1`; files never leave your machine and temp files are deleted after processing.
 
-## Setup (macOS)
+## Run on macOS
+
+Requires [Homebrew](https://brew.sh) and Python 3 (`xcode-select --install` provides one).
 
 ```sh
-brew install exiftool ffmpeg qpdf mat2
-# optional, for legacy .doc (converted to .docx):
-brew install --cask libreoffice
-./run.sh
+./run.sh        # or double-click "Metadata Cleaner.command" in Finder
 ```
 
-Open http://127.0.0.1:8000 and drop files. Multiple files (or any failures) return a zip, with `ERRORS.txt` listing failed files.
+The launcher installs any missing tools (`exiftool ffmpeg qpdf mat2`), creates a virtualenv, starts the server on `127.0.0.1:8000` (override with `PORT=9000 ./run.sh`) and opens your browser. On first double-click, macOS may require right-click → Open (Gatekeeper), or `chmod +x` if the executable bit was lost.
+
+For legacy `.doc` support: `brew install --cask libreoffice`.
+
+Multiple files (or any failures) return a zip, with `ERRORS.txt` listing failed files.
 
 ## Tools per type
 

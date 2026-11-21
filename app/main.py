@@ -1,5 +1,6 @@
 """Local-only metadata cleaner. Binds to 127.0.0.1; files never leave the machine."""
 import io
+import os
 import shutil
 import subprocess
 import tempfile
@@ -9,6 +10,11 @@ from pathlib import Path
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+
+# GUI-launched processes on macOS often lack Homebrew in PATH (Apple Silicon and Intel).
+os.environ["PATH"] = os.pathsep.join(
+    ["/opt/homebrew/bin", "/usr/local/bin", "/Applications/LibreOffice.app/Contents/MacOS", os.environ.get("PATH", "")]
+)
 
 app = FastAPI(title="Metadata Cleaner")
 STATIC = Path(__file__).parent / "static"
