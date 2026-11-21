@@ -84,6 +84,23 @@ def pick_cleaner(ext: str):
     return None
 
 
+MAGIC = [
+    (b"\xff\xd8\xff", ".jpg"), (b"\x89PNG\r\n\x1a\n", ".png"), (b"GIF8", ".gif"),
+    (b"II*\x00", ".tif"), (b"MM\x00*", ".tif"), (b"%PDF", ".pdf"),
+]
+
+
+def real_ext(name: str, data: bytes) -> str:
+    """Trust file content over the filename (e.g. a JPEG saved as .png makes exiftool fail)."""
+    ext = Path(name).suffix.lower()
+    for sig, kind in MAGIC:
+        if data.startswith(sig):
+            return ext if ext in {".jpg", ".jpeg", ".tif", ".tiff"} and ext[:3] == kind[:3] else kind
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    return ext
+
+
 def read_tags(path: Path) -> dict:
     if shutil.which("exiftool") is None:
         raise RuntimeError("'exiftool' is not installed (brew install exiftool)")
@@ -99,7 +116,7 @@ def read_tags(path: Path) -> dict:
 
 def clean_one(name: str, data: bytes) -> tuple[str, bytes, dict, dict]:
     name = Path(name).name
-    ext = Path(name).suffix.lower()
+    ext = real_ext(name, data)
     cleaner = pick_cleaner(ext)
     if cleaner is None:
         raise RuntimeError(f"unsupported file type '{ext}'")
@@ -110,7 +127,7 @@ def clean_one(name: str, data: bytes) -> tuple[str, bytes, dict, dict]:
         out = cleaner(src)
         after = read_tags(out)
         # The original is never touched; the result is a copy with a "_clean" suffix.
-        out_name = f"{Path(name).stem}_clean{'.docx' if ext == '.doc' else Path(name).suffix}"
+        out_name = f"{Path(name).stem}_clean{'.docx' if ext == '.doc' else ext}"
         return out_name, out.read_bytes(), before, after
 
 
@@ -176,7 +193,7 @@ def download(token: str):
 
 def inspect_one(name: str, data: bytes) -> dict:
     with tempfile.TemporaryDirectory() as tmp:
-        src = Path(tmp) / f"input{Path(name).suffix.lower()}"
+        src = Path(tmp) / f"input{real_ext(name, data)}"
         src.write_bytes(data)
         return read_tags(src)
 
