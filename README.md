@@ -2,11 +2,15 @@
 
 A local web app that removes metadata from documents, PDFs, images, video and audio. It runs on your Mac: the server only listens on `127.0.0.1`, files never leave your machine, and temporary files are deleted after use.
 
+![Metadata Cleaner home screen in English](docs/screenshot.png)
+
 ## How it works
 
 1. Drag files onto the page or click **Choose files**. Their current metadata is listed.
 2. Click **Delete metadata**. A before/after diff shows what was removed (red), changed (yellow) and what remains (grey).
 3. Click **Download clean copy**.
+
+![Before/after metadata diff for a JPEG, in English](docs/screenshot-clean.png)
 
 Your originals are never modified. The result is a new file named `<name>_clean.<ext>` (legacy `.doc` becomes `<name>_clean.docx`), and each result card labels which file is the original and which is the metadata-free copy. Several files, or any failure, download as a zip; `ERRORS.txt` lists files that failed.
 
